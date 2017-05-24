@@ -35,6 +35,7 @@ def parse_commandline_arguments():
     ############################################################################################################################################
     parser.add_argument( '--msdlen', '-ml', metavar = 'N', type=int, required = True, help='Length of msd' )
     parser.add_argument( '--prntfrq', '-p', metavar = 'N', type=int, required = False, default = 1000, help='Print frequency of displacements' )
+    parser.add_argument( '--npy-binary', '-b', action = 'store_true', help='Use if displacements file is in *.npy binary format' )
     parser.add_argument( '--timestep', '-t', metavar = 'F', type=float, required = False, default = 41.3414, help='Simulation timestep in a.u.' )
     parser.add_argument( '--displacement-file', '-d', help='complete displacement file filename', default='displong.out.gz' )
     parser.add_argument( '--msd-files', '-m', nargs='+', help='list of msd output files to analyse', required = True )
@@ -198,25 +199,33 @@ if __name__ == '__main__':
     convcalc = args.convcalc
     prntfrq = args.prntfrq
     timestep = args.timestep
+    binary = args.npy_binary
     
     if (not isfile( displacements_file )):
         sys.exit("File " + displacements_file + " not found")
 
-    try:
-        nlines = wccount( displacements_file )
-    except:
-        sys.exit("Problem counting the number of lines in " + displacements_file )
 
     nspcs, charges = my_system()
-    if np.sum( nspcs * charges ) != 0.0:
-        sys.exit('System is not charge balanced!')
-
     natoms = np.sum( nspcs )
-    if np.mod( nlines, natoms ) != 0:
-        sys.exit('ERROR = The number of frames in the file is not an integer multiple of the number of atoms.')
-    nframes_tot = int( nlines / natoms )
+    if not binary:
 
-    displacements = pd.read_csv( displacements_file, delim_whitespace=True,names= ['x','y','z'], dtype={'x': np.float64, 'y': np.float64, 'z': np.float64} )
+        try:
+            nlines = wccount( displacements_file )
+        except:
+            sys.exit("Problem counting the number of lines in " + displacements_file )
+        
+        if np.sum( nspcs * charges ) != 0.0:
+            sys.exit('System is not charge balanced!')
+        
+        if np.mod( nlines, natoms ) != 0:
+            sys.exit('ERROR = The number of frames in the file is not an integer multiple of the number of atoms.')
+
+        displacements = pd.read_csv( displacements_file, delim_whitespace=True,names= ['x','y','z'], dtype={'x': np.float64, 'y': np.float64, 'z': np.float64} )
+    else:
+        disps_array = np.load(displacements_file) #array shape should be (*,3) i.e. 3 columns   
+        displacements = pd.DataFrame(disps_array,columns=['x','y','z']) 
+        nlines = displacements.shape[0]
+    nframes_tot = int( nlines / natoms )
 
     if not convcalc:
         slope_stats = slope_statistics( displacements, nspcs, charges, nframes_tot, msd_length, prntfrq, timestep, slice_size_frames, slice_offset, msd_files ) 
